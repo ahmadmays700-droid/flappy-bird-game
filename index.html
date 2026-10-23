@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Flappy Bird | فلابي بيرد</title>
+<style>
+:root{--pink:#ffb9df;--purple:#9563c9;--ink:#56356f}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#b9efff;color:var(--ink);touch-action:manipulation}
+body{display:flex;align-items:center;justify-content:center}
+#gameWrap{position:relative;width:min(100vw,480px);height:100dvh;max-height:900px;overflow:hidden;background:linear-gradient(#8de1ff 0%,#d7f8ff 70%,#b7efb0 70%,#7fce83 100%);box-shadow:0 0 30px #755a9b33}
+canvas{display:block;width:100%;height:100%}
+.hud{position:absolute;top:14px;left:12px;right:12px;display:flex;justify-content:space-between;align-items:center;pointer-events:none}
+.pill{background:#fff9;border:2px solid #fff;border-radius:999px;padding:7px 13px;font-weight:900;box-shadow:0 4px 0 #8854a522;font-size:15px}
+#score{font-size:24px;min-width:54px;text-align:center;color:#fff;text-shadow:0 3px 0 #8c5ac0}
+.overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;background:#52346a1a}
+.panel{width:min(100%,330px);padding:24px 20px 22px;border:4px solid #fff;border-radius:30px;background:linear-gradient(145deg,#fff9ff,#f7dfff);text-align:center;box-shadow:0 10px 0 #c88ae0,0 18px 35px #5b3d7a33}
+h1{font-size:30px;line-height:1.1;margin:0 0 8px;color:#9955c1}
+.subtitle{font-weight:700;margin:0 0 18px;color:#77538e}
+.bearIcon{font-size:64px;line-height:1.2;margin:3px 0 12px;filter:drop-shadow(0 5px 2px #cba5e8)}
+button{border:0;border-radius:18px;background:linear-gradient(#ff9dd5,#f56fbb);color:white;font-weight:900;font-size:19px;padding:13px 20px;box-shadow:0 5px 0 #c84f9b;width:100%;cursor:pointer}
+button:active{transform:translateY(3px);box-shadow:0 2px 0 #c84f9b}
+.small{font-size:12px;margin:15px 0 0;color:#9675a8}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<div id="gameWrap">
+<canvas id="game" aria-label="لعبة فلابي بيردد"></canvas>
+<div class="hud"><div class="pill">🐤 فلابي بيردد</div><div id="score">0</div><div class="pill">أفضل نتيجة: <span id="best">0</span></div></div>
+<div class="overlay" id="startScreen"><div class="panel">
+<div class="bearIcon">🐤</div><h1>Flappy Bird</h1><p class="subtitle">ساعدي الطائر يمر بين الأعمدة! ✨</p>
+<button id="startBtn">ابدئي اللعب</button><p class="small">المسي الشاشة أو اضغطي زر المسافة للطيران</p>
+</div></div>
+<div class="overlay hidden" id="endScreen"><div class="panel">
+<div class="bearIcon">🐤✨</div><h1>انتهت الجولة!</h1><p class="subtitle">نتيجتك: <span id="finalScore">0</span> ⭐</p>
+<button id="againBtn">نلعب مرة ثانية</button><p class="small">كل محاولة تخليك أقرب لرقم قياسي جديد!</p>
+</div></div>
+</div>
+<script>
+(()=>{
+const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
+const wrap=document.getElementById('gameWrap');
+const scoreEl=document.getElementById('score'),bestEl=document.getElementById('best');
+const startScreen=document.getElementById('startScreen'),endScreen=document.getElementById('endScreen');
+let W=360,H=640,dpr=1,mode='ready',score=0,best=0,bear,pipes=[],clouds=[],last=0,spawn=0;
+try{best=Number(localStorage.getItem('flappyBirdBest')||0)}catch(e){}
+bestEl.textContent=best;
+function resize(){const r=wrap.getBoundingClientRect();W=r.width;H=r.height;dpr=Math.min(devicePixelRatio||1,2);canvas.width=Math.round(W*dpr);canvas.height=Math.round(H*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);if(mode==='ready')resetWorld()}
+function resetWorld(){score=0;scoreEl.textContent='0';pipes=[];spawn=0;bear={x:W*.29,y:H*.42,vy:0,r:17,rot:0};clouds=Array.from({length:5},(_,i)=>({x:i*W*.32+20,y:50+(i*79)%(H*.42),s:.55+(i%3)*.18}))}
+function rounded(x,y,w,h,r){ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fill()}
+function drawCloud(x,y,s){ctx.save();ctx.translate(x,y);ctx.scale(s,s);ctx.fillStyle='#ffffffc9';ctx.beginPath();ctx.arc(0,0,14,0,Math.PI*2);ctx.arc(15,-7,19,0,Math.PI*2);ctx.arc(35,0,14,0,Math.PI*2);ctx.rect(-2,0,39,12);ctx.fill();ctx.restore()}
+function drawBear(){ctx.save();ctx.translate(bear.x,bear.y);ctx.rotate(Math.max(-.35,Math.min(.55,bear.vy*1.2)));
+ // ريشة صغيرة أعلى الرأس
+ ctx.fillStyle='#ffb6d9';ctx.beginPath();ctx.ellipse(-2,-20,4,8,-.5,0,Math.PI*2);ctx.fill();
+ // جناح
+ ctx.fillStyle='#ffca58';ctx.beginPath();ctx.ellipse(-12,2,10,7,Math.sin(performance.now()/90)*.35,0,Math.PI*2);ctx.fill();
+ // جسم الطائر
+ ctx.fillStyle='#ffe66d';ctx.beginPath();ctx.ellipse(0,0,19,15,0,0,Math.PI*2);ctx.fill();
+ ctx.strokeStyle='#f6c84c';ctx.lineWidth=2;ctx.stroke();
+ // خدود
+ ctx.fillStyle='#ff9fc5';ctx.beginPath();ctx.arc(-8,5,3,0,Math.PI*2);ctx.fill();
+ // عين
+ ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(7,-4,5,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle='#49324e';ctx.beginPath();ctx.arc(8,-4,2.5,0,Math.PI*2);ctx.fill();
+ // منقار
+ ctx.fillStyle='#ff9a45';ctx.beginPath();ctx.moveTo(15,1);ctx.lineTo(25,5);ctx.lineTo(15,8);ctx.closePath();ctx.fill();
+ // ذيل
+ ctx.fillStyle='#ffca58';ctx.beginPath();ctx.moveTo(-17,0);ctx.lineTo(-25,-5);ctx.lineTo(-23,4);ctx.closePath();ctx.fill();
+ ctx.restore()}
+function drawPipe(p){const grad=ctx.createLinearGradient(p.x,0,p.x+p.w,0);grad.addColorStop(0,'#56bd72');grad.addColorStop(.5,'#9be48a');grad.addColorStop(1,'#43a65e');ctx.fillStyle=grad;
+ rounded(p.x,0,p.w,p.top,8);rounded(p.x,p.bottom,p.w,H-p.bottom,8);
+ ctx.fillStyle='#3fa35c';rounded(p.x-5,p.top-16,p.w+10,16,5);rounded(p.x-5,p.bottom,p.w+10,16,5);
+ ctx.strokeStyle='#ffffff65';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(p.x+7,5);ctx.lineTo(p.x+7,p.top-22);ctx.moveTo(p.x+7,p.bottom+22);ctx.lineTo(p.x+7,H-5);ctx.stroke()}
+function addPipe(){const gap=Math.max(142, H*.235),minTop=70,maxTop=H-gap-110;const top=minTop+Math.random()*Math.max(20,maxTop-minTop);pipes.push({x:W+10,w:55,top,bottom:top+gap,passed:false})}
+function drawBackground(dt){const sky=ctx.createLinearGradient(0,0,0,H);sky.addColorStop(0,'#8bdfff');sky.addColorStop(.72,'#e5fbff');sky.addColorStop(.72,'#b5edaa');sky.addColorStop(1,'#79c97b');ctx.fillStyle=sky;ctx.fillRect(0,0,W,H);
+ clouds.forEach(c=>{drawCloud(c.x,c.y,c.s);if(mode==='playing')c.x-=dt*.012;if(c.x<-60)c.x=W+50});
+ // hills
+ ctx.fillStyle='#9cdda0';ctx.beginPath();ctx.ellipse(W*.18,H*.73,W*.45,55,0,Math.PI,Math.PI*2);ctx.ellipse(W*.82,H*.74,W*.48,65,0,Math.PI,Math.PI*2);ctx.fill();
+ ctx.fillStyle='#80ce80';ctx.fillRect(0,H-44,W,44);ctx.fillStyle='#c5f2a4';for(let x=0;x<W;x+=18){ctx.beginPath();ctx.moveTo(x,H-44);ctx.lineTo(x+5,H-52-(x%3)*2);ctx.lineTo(x+10,H-44);ctx.fill()}
+}
+function frame(t){const dt=Math.min(32,t-(last||t));last=t;drawBackground(dt);
+ if(mode==='playing'){bear.vy=Math.min(bear.vy+.00042*dt,.22);bear.y+=bear.vy*dt;spawn+=dt;if(spawn>1450){addPipe();spawn=0}
+ pipes.forEach(p=>{p.x-=dt*.14;if(!p.passed&&p.x+p.w<bear.x){p.passed=true;score++;scoreEl.textContent=score}if(bear.x+bear.r>p.x&&bear.x-bear.r<p.x+p.w&&(bear.y-bear.r<p.top||bear.y+bear.r>p.bottom))endGame()});pipes=pipes.filter(p=>p.x+p.w>-10);
+ if(bear.y-bear.r<0||bear.y+bear.r>H-45)endGame()
+ }else if(mode==='ready'){bear.y=H*.42+Math.sin(t/230)*7}
+ pipes.forEach(drawPipe);drawBear();requestAnimationFrame(frame)}
+function flap(){if(mode==='ready'){startGame();return}if(mode==='playing')bear.vy=-.24}
+function startGame(){resetWorld();mode='playing';startScreen.classList.add('hidden');endScreen.classList.add('hidden');bear.vy=-.22}
+function endGame(){if(mode!=='playing')return;mode='over';if(score>best){best=score;bestEl.textContent=best;try{localStorage.setItem('flappyBirdBest',best)}catch(e){}}document.getElementById('finalScore').textContent=score;endScreen.classList.remove('hidden')}
+document.getElementById('startBtn').addEventListener('click',startGame);
+document.getElementById('againBtn').addEventListener('click',startGame);
+canvas.addEventListener('pointerdown',e=>{e.preventDefault();flap()});
+document.addEventListener('keydown',e=>{if(e.code==='Space'||e.code==='ArrowUp'){e.preventDefault();flap()}});
+window.addEventListener('resize',resize);resize();resetWorld();requestAnimationFrame(frame);
+})();
+</script>
+</body></html>
